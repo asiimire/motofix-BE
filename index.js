@@ -1,13 +1,13 @@
 // load env variables
-require('dotenv').config(); // Reads .env file for secrets
-const express = require('express'); // Web server framework
+require('dotenv').config();
+const express = require('express');
 const cors = require('cors');
-const AfricasTalking = require('africastalking'); // SMS API for sending OTPs.
-const sqlite3 = require('sqlite3').verbose(); // Lightweight database to store OTPs.
+const AfricasTalking = require('africastalking');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 // Validate required environment variables
-const requiredEnvVars = ['AT_API_KEY', 'AT_USERNAME', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'];
+const requiredEnvVars = ['AT_API_KEY', 'AT_USERNAME', 'FRONTEND_URL'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     console.error(`Missing required environment variable: ${envVar}`);
@@ -15,7 +15,7 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Initialize Africa's Talking. Configures the SMS client to send OTP messages.
+// Initialize Africa's Talking
 const AT = AfricasTalking({
   apiKey: process.env.AT_API_KEY,
   username: process.env.AT_USERNAME,
@@ -49,14 +49,34 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 // Initialize Express
 const app = express();
 
-// Configure CORS for production
+// Configure CORS
+const allowedOrigins = [
+  process.env.FRONTEND_URL, // Production frontend
+  'http://localhost:8080' // Local development
+];
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.VITE_API_URL 
-    : '*',
+  origin: function (origin, callback) {
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
   optionsSuccessStatus: 200
 };
+
+// Apply CORS middleware
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight requests
+
+// Other middleware
 app.use(express.json());
 
 // Rate limiting middleware
