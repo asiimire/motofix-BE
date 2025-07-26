@@ -1,4 +1,5 @@
 // load env variables
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -6,7 +7,7 @@ const AfricasTalking = require('africastalking');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-// Validate required environment variables
+// Validate environment variables
 const requiredEnvVars = ['AT_API_KEY', 'AT_USERNAME', 'FRONTEND_URL'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -15,25 +16,19 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Initialize Africa's Talking
+// Initialize services
 const AT = AfricasTalking({
   apiKey: process.env.AT_API_KEY,
   username: process.env.AT_USERNAME,
 });
 const sms = AT.SMS;
 
-// Initialize SQLite with proper file path for Vercel
 const dbPath = process.env.NODE_ENV === 'production' 
   ? path.join('/tmp', 'otp_database.db') 
   : 'otp_database.db';
 
 const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-    process.exit(1);
-  }
-  
-  // Create OTPs table with timestamp and attempt tracking
+  if (err) console.error('Database error:', err.message);
   db.run(`
     CREATE TABLE IF NOT EXISTS otps (
       phoneNumber TEXT PRIMARY KEY,
@@ -46,35 +41,42 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
   `);
 });
 
-// Initialize Express
 const app = express();
 
-// Configure CORS
+// ========== CRITICAL CORS FIX ==========
 const allowedOrigins = [
-  process.env.FRONTEND_URL, // Production frontend
-  'http://localhost:8080' // Local development
+  'https://motofix-driver.vercel.app',
+  'http://localhost:8080'
 ];
 
-const corsOptions = {
+// Configure CORS to work with Vercel
+// CORS Middleware
+app.use((req, res, next) => {
+  // Allow your frontend origin
+  res.header('Access-Control-Allow-Origin', 'https://motofix-driver.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+// Regular CORS middleware as fallback
+app.use(cors({
   origin: function (origin, callback) {
-    if (!origin && process.env.NODE_ENV === 'development') {
-      return callback(null, true);
-    }
-    
-    if (allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  optionsSuccessStatus: 200
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle preflight requests
+  credentials: true
+}));
+// ========== END CORS FIX ==========
 
 // Other middleware
 app.use(express.json());
