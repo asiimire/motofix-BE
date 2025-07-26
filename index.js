@@ -1,8 +1,9 @@
-require('dotenv').config();
-const express = require('express');
+// load env variables
+require('dotenv').config(); // Reads .env file for secrets
+const express = require('express'); // Web server framework
 const cors = require('cors');
-const AfricasTalking = require('africastalking');
-const sqlite3 = require('sqlite3').verbose();
+const AfricasTalking = require('africastalking'); // SMS API for sending OTPs.
+const sqlite3 = require('sqlite3').verbose(); // Lightweight database to store OTPs.
 const path = require('path');
 
 // Validate required environment variables
@@ -14,7 +15,7 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Initialize Africa's Talking
+// Initialize Africa's Talking. Configures the SMS client to send OTP messages.
 const AT = AfricasTalking({
   apiKey: process.env.AT_API_KEY,
   username: process.env.AT_USERNAME,
@@ -138,7 +139,7 @@ app.post('/api/send-otp', async (req, res) => {
         // Send SMS
         sms.send({
           to: [phoneNumber],
-          message: `Your MotoFix verification code is: ${otp}`,
+          message: `Beloved, Your MOTOFIX verification code is: ${otp}`,
           from: '', // Default sender ID
         })
         .then(() => {
