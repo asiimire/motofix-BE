@@ -2,13 +2,12 @@
 
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const AfricasTalking = require('africastalking');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 // Validate environment variables
-const requiredEnvVars = ['AT_API_KEY', 'AT_USERNAME', 'FRONTEND_URL'];
+const requiredEnvVars = ['AT_API_KEY', 'AT_USERNAME'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     console.error(`Missing required environment variable: ${envVar}`);
@@ -23,6 +22,7 @@ const AT = AfricasTalking({
 });
 const sms = AT.SMS;
 
+// Database setup
 const dbPath = process.env.NODE_ENV === 'production' 
   ? path.join('/tmp', 'otp_database.db') 
   : 'otp_database.db';
@@ -43,42 +43,22 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 const app = express();
 
-// ========== CRITICAL CORS FIX ==========
-const allowedOrigins = [
-  'https://motofix-driver.vercel.app',
-  'http://localhost:8080'
-];
-
-// Configure CORS to work with Vercel
-// CORS Middleware
+// ========== SIMPLIFIED CORS SOLUTION ==========
 app.use((req, res, next) => {
-  // Allow your frontend origin
+  // Set CORS headers for all responses
   res.header('Access-Control-Allow-Origin', 'https://motofix-driver.vercel.app');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Allow-Credentials', 'true');
   
-  // Handle preflight requests
+  // Immediately respond to OPTIONS requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
   
   next();
 });
-// Regular CORS middleware as fallback
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
-// ========== END CORS FIX ==========
 
-// Other middleware
 app.use(express.json());
 
 // Rate limiting middleware
