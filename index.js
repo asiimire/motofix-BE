@@ -1,5 +1,6 @@
-// load env variables
+// index.js
 
+// Load environment variables
 require('dotenv').config();
 const express = require('express');
 const AfricasTalking = require('africastalking');
@@ -15,7 +16,7 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Initialize services
+// Initialize Africa's Talking
 const AT = AfricasTalking({
   apiKey: process.env.AT_API_KEY,
   username: process.env.AT_USERNAME,
@@ -45,17 +46,15 @@ const app = express();
 
 // ========== SIMPLIFIED CORS SOLUTION ==========
 app.use((req, res, next) => {
-  // Set CORS headers for all responses
-  res.header('Access-Control-Allow-Origin', 'https://motofix-driver.vercel.app');
+  res.header('Access-Control-Allow-Origin', 'https://motofix-driver.onrender.com'); // updated for Render frontend
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Immediately respond to OPTIONS requests
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   next();
 });
 
@@ -69,24 +68,24 @@ const MAX_REQUESTS = 5;
 app.use((req, res, next) => {
   const ip = req.ip;
   const now = Date.now();
-  
+
   if (!rateLimit[ip]) {
     rateLimit[ip] = { count: 1, startTime: now };
     return next();
   }
-  
+
   if (now - rateLimit[ip].startTime > RATE_LIMIT_WINDOW) {
     rateLimit[ip] = { count: 1, startTime: now };
     return next();
   }
-  
+
   if (rateLimit[ip].count >= MAX_REQUESTS) {
     return res.status(429).json({ 
       success: false, 
       message: 'Too many requests. Please try again later.' 
     });
   }
-  
+
   rateLimit[ip].count++;
   next();
 });
@@ -97,7 +96,7 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 // Send OTP endpoint
 app.post('/api/send-otp', async (req, res) => {
   const { phoneNumber } = req.body;
-  
+
   if (!phoneNumber) {
     return res.status(400).json({ 
       success: false, 
@@ -105,7 +104,6 @@ app.post('/api/send-otp', async (req, res) => {
     });
   }
 
-  // Validate phone number format
   if (!/^\+?\d{10,15}$/.test(phoneNumber)) {
     return res.status(400).json({ 
       success: false, 
@@ -115,20 +113,16 @@ app.post('/api/send-otp', async (req, res) => {
 
   const otp = generateOTP();
   const now = Date.now();
-  const expiresAt = now + 5 * 60 * 1000; // OTP expires in 5 minutes
+  const expiresAt = now + 5 * 60 * 1000;
 
   try {
-    // Check if recent OTP exists
     db.get(
       'SELECT createdAt FROM otps WHERE phoneNumber = ? AND createdAt > ?',
-      [phoneNumber, now - 2 * 60 * 1000], // 2 minute cooldown
+      [phoneNumber, now - 2 * 60 * 1000],
       (err, row) => {
         if (err) {
           console.error('Database error:', err.message);
-          return res.status(500).json({ 
-            success: false, 
-            message: 'Internal server error' 
-          });
+          return res.status(500).json({ success: false, message: 'Internal server error' });
         }
 
         if (row) {
@@ -138,29 +132,21 @@ app.post('/api/send-otp', async (req, res) => {
           });
         }
 
-        // Send SMS
         sms.send({
           to: [phoneNumber],
           message: `Beloved, Your MOTOFIX verification code is: ${otp}`,
-          from: '', // Default sender ID
+          from: '',
         })
         .then(() => {
-          // Store OTP in SQLite
           db.run(
             'INSERT OR REPLACE INTO otps (phoneNumber, otp, expiresAt, createdAt) VALUES (?, ?, ?, ?)',
             [phoneNumber, otp, expiresAt, now],
             (err) => {
               if (err) {
                 console.error('Error storing OTP:', err.message);
-                return res.status(500).json({ 
-                  success: false, 
-                  message: 'Failed to store OTP' 
-                });
+                return res.status(500).json({ success: false, message: 'Failed to store OTP' });
               }
-              res.json({ 
-                success: true, 
-                message: `OTP sent to ${phoneNumber}` 
-              });
+              res.json({ success: true, message: `OTP sent to ${phoneNumber}` });
             }
           );
         })
@@ -175,17 +161,14 @@ app.post('/api/send-otp', async (req, res) => {
     );
   } catch (error) {
     console.error('Unexpected error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'An unexpected error occurred' 
-    });
+    res.status(500).json({ success: false, message: 'An unexpected error occurred' });
   }
 });
 
 // Verify OTP endpoint
 app.post('/api/verify-otp', (req, res) => {
   const { phoneNumber, otp } = req.body;
-  
+
   if (!phoneNumber || !otp) {
     return res.status(400).json({ 
       success: false, 
@@ -199,57 +182,35 @@ app.post('/api/verify-otp', (req, res) => {
     (err, row) => {
       if (err) {
         console.error('Database error:', err.message);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Internal server error' 
-        });
+        return res.status(500).json({ success: false, message: 'Internal server error' });
       }
 
       if (!row) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'OTP not found or expired' 
-        });
+        return res.status(400).json({ success: false, message: 'OTP not found or expired' });
       }
 
       const { otp: storedOTP, expiresAt, attempts } = row;
       const now = Date.now();
 
-      // Check if OTP expired
       if (now > expiresAt) {
         db.run('DELETE FROM otps WHERE phoneNumber = ?', [phoneNumber]);
-        return res.status(400).json({ 
-          success: false, 
-          message: 'OTP expired' 
-        });
+        return res.status(400).json({ success: false, message: 'OTP expired' });
       }
 
-      // Check attempt limit
       if (attempts >= 3) {
         db.run('DELETE FROM otps WHERE phoneNumber = ?', [phoneNumber]);
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Too many attempts. Please request a new OTP.' 
-        });
+        return res.status(400).json({ success: false, message: 'Too many attempts. Please request a new OTP.' });
       }
 
-      // Verify OTP
       if (otp === storedOTP) {
         db.run('DELETE FROM otps WHERE phoneNumber = ?', [phoneNumber]);
-        return res.json({ 
-          success: true, 
-          message: 'OTP verified successfully' 
-        });
+        return res.json({ success: true, message: 'OTP verified successfully' });
       } else {
-        // Increment attempt counter
         db.run(
           'UPDATE otps SET attempts = attempts + 1, lastAttemptAt = ? WHERE phoneNumber = ?',
           [now, phoneNumber]
         );
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Invalid OTP' 
-        });
+        return res.status(400).json({ success: false, message: 'Invalid OTP' });
       }
     }
   );
@@ -268,7 +229,7 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Handle shutdown gracefully
+// Graceful shutdown
 process.on('SIGTERM', () => {
   db.close();
   process.exit(0);

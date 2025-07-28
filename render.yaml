@@ -1,0 +1,15 @@
+# render.yaml (Backend)
+services:
+  - type: web
+    name: motofix-BE
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+    routes:
+      - path: /api/*
+        headers:
+          Access-Control-Allow-Origin: ${FRONTEND_URL}
+          Access-Control-Allow-Methods: GET,POST,OPTIONS
