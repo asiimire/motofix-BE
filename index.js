@@ -1,11 +1,16 @@
-// index.js
-
 // Load environment variables
 require('dotenv').config();
 const express = require('express');
 const AfricasTalking = require('africastalking');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const cors = require('cors');
+
+// Environment configuration
+const isProduction = process.env.NODE_ENV === 'production';
+const frontendUrl = isProduction 
+  ? 'https://motofix-driver.vercel.app' 
+  : 'http://localhost:8080';
 
 // Validate environment variables
 const requiredEnvVars = ['AT_API_KEY', 'AT_USERNAME'];
@@ -24,9 +29,9 @@ const AT = AfricasTalking({
 const sms = AT.SMS;
 
 // Database setup
-const dbPath = process.env.NODE_ENV === 'production' 
-  ? path.join('/tmp', 'otp_database.db') 
-  : 'otp_database.db';
+const dbPath = isProduction
+  ? path.join('/tmp', 'otp_database.db')
+  : path.join(__dirname, 'otp_database.db');
 
 const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
   if (err) console.error('Database error:', err.message);
@@ -44,19 +49,13 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 const app = express();
 
-// ========== SIMPLIFIED CORS SOLUTION ==========
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://motofix-driver.onrender.com'); // updated for Render frontend
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  res.header('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  next();
-});
+// CORS configuration
+app.use(cors({
+  origin: frontendUrl,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
+}));
 
 app.use(express.json());
 
@@ -134,8 +133,8 @@ app.post('/api/send-otp', async (req, res) => {
 
         sms.send({
           to: [phoneNumber],
-          message: `Beloved, Your MOTOFIX verification code is: ${otp}`,
-          from: '',
+          message: `Beloved, ${otp} is your MOTOFIX verification code`,
+          from: 'MOTOFIX',
         })
         .then(() => {
           db.run(
@@ -220,13 +219,15 @@ app.post('/api/verify-otp', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy',
+    environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString()
   });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  console.log(`Allowed CORS origin: ${frontendUrl}`);
 });
 
 // Graceful shutdown
